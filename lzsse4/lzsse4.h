@@ -23,8 +23,8 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef LZSSEF_H__
-#define LZSSEF_H__
+#ifndef LZSSE4_H__
+#define LZSSE4_H__
 
 #pragma once
 
@@ -33,13 +33,13 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
 /* Re-usable parse state object for compression. */
-typedef struct LZSSEF_FastParseState LZSSEF_FastParseState;
+typedef struct LZSSE4_FastParseState LZSSE4_FastParseState;
 
 /* Allocate the parse state for compression - returns null on failure */
-LZSSEF_FastParseState* LZSSEF_MakeFastParseState();
+LZSSE4_FastParseState* LZSSE4_MakeFastParseState();
 
 /* De-allocate the parse state for compression */
-void LZSSEF_FreeFastParseState( LZSSEF_FastParseState* toFree );
+void LZSSE4_FreeFastParseState( LZSSE4_FastParseState* toFree );
 
 /* LZZSE-F "Fast" compression routine.
  * Will compress data into LZSSE-F format, uses a simple single entry hash/greedy matching to find matches. Requires SSE 4.1.
@@ -55,7 +55,7 @@ void LZSSEF_FreeFastParseState( LZSSEF_FastParseState* toFree );
  *
  * Returns the size of the compressed data, or 0 in the case of error (e.g. outputLength is less than inputLength).
  */
-size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* input, size_t inputLength, char* output, size_t outputLength );
+size_t LZSSE4_CompressFast( LZSSE4_FastParseState* state, const char* input, size_t inputLength, char* output, size_t outputLength );
 
 /* LZZSE-F Decompression routine.
  * This routine will decompress data in the LZSSE-F format and currently requires SSE 4.1 and is targeted at x64.
@@ -75,7 +75,7 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* input, siz
  * Note that this data is not hash verified, errors that occur are either from a misformed stream or bad buffer sizes.
  * Remember, corrupt data can still be valid to decompress.
  */ 
-size_t LZSSEF_Decompress( const char* input, size_t inputLength, char* output, size_t outputLength );
+size_t LZSSE4_Decompress( const char* input, size_t inputLength, char* output, size_t outputLength );
 
 
-#endif /* -- LZSSEF_H__ */
+#endif /* -- LZSSE4_H__ */

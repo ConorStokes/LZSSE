@@ -23,7 +23,7 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "lzssef.h"
+#include "lzsse8.h"
 #include <intrin.h>
 #include <memory.h>
 #include <stdint.h>
@@ -44,44 +44,39 @@ namespace
     const uint32_t MIN_COMPRESSION_SIZE    = 32;
     const uint32_t END_PADDING_LITERALS    = 16;
     const int32_t  NO_MATCH                = -1;
-    const uint32_t MIN_LITERAL_COUNT       = 8;
     const uint32_t CONTROL_BITS            = 4;
-    const uint32_t LITERAL_BITS            = 8;
-    const uint32_t OFFSET_BITS             = 16;
     const uint32_t OFFSET_SIZE             = 2;
-    const uint32_t BASE_MATCH_BITS         = OFFSET_BITS + CONTROL_BITS;
-    const uint32_t SINGLE_LITERAL_COST     = CONTROL_BITS + LITERAL_BITS;
-    const uint32_t DOUBLE_LITERAL_COST     = SINGLE_LITERAL_COST + LITERAL_BITS;
-    const uint32_t BASE_MATCH_LENGTH       = ( 1 << CONTROL_BITS ) - 1;
+    const uint32_t EXTENDED_MATCH_BOUND    = ( 1 << CONTROL_BITS ) - 1;
     const uint32_t CONTROL_BLOCK_SIZE      = sizeof( __m128i );
     const uint32_t CONTROLS_PER_BLOCK      = 32;
-    const uint32_t LITERALS_PER_CONTROL    = 4;
-    const uint32_t MAX_INPUT_PER_CONTROL   = 4;
-    const size_t   OUTPUT_BUFFER_SAFE      = BASE_MATCH_LENGTH * CONTROLS_PER_BLOCK;
+    const uint32_t LITERALS_PER_CONTROL    = 8;
+    const uint32_t MAX_INPUT_PER_CONTROL   = 8;
+    const uint32_t INITIAL_MATCH_BOUND     = 11;
+    const size_t   OUTPUT_BUFFER_SAFE      = EXTENDED_MATCH_BOUND * CONTROLS_PER_BLOCK;
     const size_t   INPUT_BUFFER_SAFE       = MAX_INPUT_PER_CONTROL * CONTROLS_PER_BLOCK;
-    const uint16_t INITIAL_OFFSET          = MIN_MATCH_LENGTH;
+    const uint16_t INITIAL_OFFSET          = LITERALS_PER_CONTROL;
 }
 
 
-struct LZSSEF_FastParseState
+struct LZSSE8_FastParseState
 {
     int32_t buckets[ FAST_BUCKETS_COUNT ]; // stores the first matching position, we can then look at the rest of the matches by tracing through the window.
 };
 
 
-LZSSEF_FastParseState* LZSSEF_MakeFastParseState()
+LZSSE8_FastParseState* LZSSE8_MakeFastParseState()
 {
-    return new LZSSEF_FastParseState();
+    return new LZSSE8_FastParseState();
 }
 
 
-void LZSSEF_FreeFastParseState( LZSSEF_FastParseState* toFree )
+void LZSSE8_FreeFastParseState( LZSSE8_FastParseState* toFree )
 {
     delete toFree;
 }
 
 
-inline void SetHash( LZSSEF_FastParseState* state, uint32_t hash, const uint8_t* input, const uint8_t* inputCursor )
+inline void SetHash( LZSSE8_FastParseState* state, uint32_t hash, const uint8_t* input, const uint8_t* inputCursor )
 {
     int32_t position = static_cast<int32_t>( inputCursor - input );
 
@@ -95,7 +90,7 @@ inline uint32_t HashFast( const uint8_t* inputCursor )
     return *reinterpret_cast<const uint32_t*>( inputCursor ) * 0x1e35a7bd >> ( 32 - FAST_HASH_BITS );
 }
 
-size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar, size_t inputLength, char* outputChar, size_t outputLength )
+size_t LZSSE8_CompressFast( LZSSE8_FastParseState* state, const char* inputChar, size_t inputLength, char* outputChar, size_t outputLength )
 {
     if ( outputLength < inputLength )
     {
@@ -130,7 +125,7 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar,
     }
 
     // initial literals that wont be compressed
-    for ( uint32_t where = 0; where < MIN_MATCH_LENGTH; ++where )
+    for ( uint32_t where = 0; where < LITERALS_PER_CONTROL; ++where )
     {
         hash = HashFast( inputCursor );
 
@@ -157,13 +152,13 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar,
         uint16_t matchOffset     = static_cast< uint16_t >( currentPosition - matchPosition );
 
         // If we had a hit in the hash and it wasn't outside the window.
-        if ( matchPosition >= 0 && ( currentPosition - matchPosition ) < ( LZ_WINDOW_SIZE - 1 ) )
+        if ( matchPosition >= 0 && ( currentPosition - matchPosition ) < ( LZ_WINDOW_SIZE - 1 ) && matchOffset >= LITERALS_PER_CONTROL )
         {
             const uint8_t* matchCandidate = input + matchPosition;
             uint32_t       lengthToEnd    = static_cast< uint32_t >( inputEarlyEnd - inputCursor );
             // Here we limit the hash length to prevent overlap matches with offset less than 16 bytes
-            uint32_t       maxLength      = matchOffset <= ( BASE_MATCH_LENGTH + 1 ) && matchOffset < lengthToEnd ? matchOffset : lengthToEnd;
-
+            uint32_t       maxLength      = matchOffset <= ( EXTENDED_MATCH_BOUND + 1 ) && matchOffset < lengthToEnd ? matchOffset : lengthToEnd;
+            
             // Find how long the match is 16 bytes at a time.
             while ( matchLength < maxLength )
             {
@@ -177,7 +172,7 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar,
 
                 matchLength += matchBytes;
 
-                if ( matchBytes != 16 )
+                if ( matchBytes != sizeof( __m128i ) )
                 {
                     break;
                 }
@@ -224,7 +219,7 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar,
                 ++currentControlCount;
 
                 literalsToFlush = 0;
-                    
+
                 // Would be larger than compressed size, get out!
                 if ( outputCursor > outputEarlyEnd )
                 {
@@ -244,7 +239,7 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar,
                 _mm_storeu_si128( reinterpret_cast< __m128i* >( outputCursor ), _mm_setzero_si128() );
 
                 currentControlCount  = 0;
-                    
+
                 if ( outputCursor > outputEarlyEnd )
                 {
                     break;
@@ -252,7 +247,6 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar,
             }
 
             // The match length value we are encoding.
-            size_t toEncode = matchLength;
 
             // Write the offset out - note the xor with the previous offset.
             *reinterpret_cast< uint16_t* >( outputCursor ) = matchOffset ^ previousOffset;
@@ -260,43 +254,60 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar,
             previousOffset = matchOffset;
             outputCursor  += sizeof( uint16_t );
 
-            for ( ;; )
+            if ( matchLength < INITIAL_MATCH_BOUND )
             {
-                // Check if we need to start a new control block
-                if ( currentControlCount == CONTROLS_PER_BLOCK )
+                currentControlBlock[ currentControlCount >> 1 ] = 
+                    ( currentControlBlock[ currentControlCount >> 1 ] >> 4 ) | ( static_cast<uint8_t>( matchLength + MIN_MATCH_LENGTH ) << 4 );
+
+                ++currentControlCount;
+            }
+            else
+            {
+                currentControlBlock[ currentControlCount >> 1 ] = 
+                    ( currentControlBlock[ currentControlCount >> 1 ] >> 4 ) | ( static_cast<uint8_t>( EXTENDED_MATCH_BOUND ) << 4 );
+
+                ++currentControlCount;
+
+                size_t toEncode = matchLength - INITIAL_MATCH_BOUND;
+
+                for ( ;; )
                 {
-                    currentControlBlock  = outputCursor;
-                    outputCursor        += CONTROL_BLOCK_SIZE;
-
-                    _mm_storeu_si128( reinterpret_cast< __m128i* >( outputCursor ), _mm_setzero_si128() );
-
-                    currentControlCount  = 0;
-                        
-                    if ( outputCursor > outputEarlyEnd )
+                    // Check if we need to start a new control block
+                    if ( currentControlCount == CONTROLS_PER_BLOCK )
                     {
+                        currentControlBlock = outputCursor;
+                        outputCursor       += CONTROL_BLOCK_SIZE;
+
+                        _mm_storeu_si128( reinterpret_cast<__m128i*>( outputCursor ), _mm_setzero_si128() );
+
+                        currentControlCount = 0;
+
+                        if ( outputCursor > outputEarlyEnd )
+                        {
+                            break;
+                        }
+                    }
+
+                    // If the encode size is greater than we can hold in a control, write out a full match length
+                    // control, subtract full control value from the amount to encode and loop around again.
+                    if ( toEncode >= EXTENDED_MATCH_BOUND )
+                    {
+                        currentControlBlock[ currentControlCount >> 1 ] =
+                            ( currentControlBlock[ currentControlCount >> 1 ] >> 4 ) | ( static_cast<uint8_t>( EXTENDED_MATCH_BOUND ) << 4 );
+
+                        toEncode -= EXTENDED_MATCH_BOUND;
+
+                        ++currentControlCount;
+                    }
+                    else // Write out the remaining match length control. Could potentially be zero.
+                    {
+                        currentControlBlock[ currentControlCount >> 1 ] =
+                            ( currentControlBlock[ currentControlCount >> 1 ] >> 4 ) | ( static_cast<uint8_t>( toEncode ) << 4 );
+
+                        ++currentControlCount;
+
                         break;
                     }
-                }
-
-                // If the encode size is greater than we can hold in a control, write out a full match length
-                // control, subtract full control value from the amount to encode and loop around again.
-                if ( toEncode >= BASE_MATCH_LENGTH )
-                {
-                    currentControlBlock[ currentControlCount >> 1 ] = 
-                        ( currentControlBlock[ currentControlCount >> 1 ] >> 4 ) | ( static_cast<uint8_t>( BASE_MATCH_LENGTH ) << 4 );
-
-                    toEncode -= BASE_MATCH_LENGTH;
-
-                    ++currentControlCount;
-                }
-                else // Write out the remaining match length control. Could potentially be zero.
-                {
-                    currentControlBlock[ currentControlCount >> 1 ] = 
-                        ( currentControlBlock[ currentControlCount >> 1 ] >> 4 ) | ( static_cast<uint8_t>( toEncode ) << 4 );
-
-                    ++currentControlCount;
-
-                    break;
                 }
             }
 
@@ -341,17 +352,17 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar,
 
                 ++currentControlCount;
 
-                *reinterpret_cast< uint32_t* >( outputCursor ) = 
-                    *reinterpret_cast< const uint32_t* >( inputCursor - 3 ) ^ 
-                    *reinterpret_cast< const uint32_t* >( ( inputCursor - 3 ) - previousOffset );
+                *reinterpret_cast< uint64_t* >( outputCursor ) = 
+                    *reinterpret_cast< const uint64_t* >( inputCursor - ( sizeof( uint64_t ) - 1 ) ) ^ 
+                    *reinterpret_cast< const uint64_t* >( ( inputCursor - ( sizeof( uint64_t ) - 1 ) ) - previousOffset );
 
-                outputCursor += 4;
+                outputCursor += sizeof( uint64_t );
 
                 //*( outputCursor++ ) = *( inputCursor - 3 ) ^ *( ( inputCursor - 3 ) - previousOffset );
                 //*( outputCursor++ ) = *( inputCursor - 2 ) ^ *( ( inputCursor - 2 ) - previousOffset );
                 //*( outputCursor++ ) = *( inputCursor - 1 ) ^ *( ( inputCursor - 1 ) - previousOffset );
                 //*( outputCursor++ ) = *inputCursor ^ *( inputCursor - previousOffset );
-                    
+
                 if ( outputCursor > outputEarlyEnd )
                 {
                     break;
@@ -391,14 +402,23 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar,
 
             currentControlBlock[ currentControlCount >> 1 ] = 
                 ( currentControlBlock[ currentControlCount >> 1 ] >> 4 ) | ( static_cast<uint8_t>( literalsToFlush - 1 ) << 4 );
-            
+
             for ( uint32_t where = 0; where < literalsToFlush; ++where )
             {
                 const uint8_t* currentInput = inputCursor - ( literalsToFlush - where );
 
                 *( outputCursor++ ) = *currentInput ^ *( currentInput - previousOffset );
             }
+
+            ++currentControlCount;
         }
+
+        // Need to finish off shifting the final control block into the low nibble if there is no second nibble
+        if ( ( currentControlCount & 1 ) > 0 )
+        {
+            currentControlBlock[ currentControlCount >> 1 ] >>= 4;
+        }
+
 
         size_t remainingLiterals = ( input + inputLength ) - inputCursor;
 
@@ -413,7 +433,7 @@ size_t LZSSEF_CompressFast( LZSSEF_FastParseState* state, const char* inputChar,
 }
 
 
-size_t LZSSEF_Decompress( const char* inputChar, size_t inputLength, char* outputChar, size_t outputLength )
+size_t LZSSE8_Decompress( const char* inputChar, size_t inputLength, char* outputChar, size_t outputLength )
 {
     const uint8_t* input  = reinterpret_cast< const uint8_t* >( inputChar );
     uint8_t*       output = reinterpret_cast< uint8_t* >( outputChar );
@@ -435,7 +455,7 @@ size_t LZSSEF_Decompress( const char* inputChar, size_t inputLength, char* outpu
     __m128i previousCarryHi = _mm_setzero_si128();
 
     // Copy the initial literals to the output.
-    for ( uint32_t where = 0; where < MIN_MATCH_LENGTH; ++where )
+    for ( uint32_t where = 0; where < LITERALS_PER_CONTROL; ++where )
     {
         *( outputCursor++ ) = *( inputCursor++ );
     }
@@ -565,8 +585,10 @@ size_t LZSSEF_Decompress( const char* inputChar, size_t inputLength, char* outpu
 #define DECODE_STEP_END_LO(CHECKMATCH, CHECKBUFFERS )      DECODE_STEP_END( Lo, CHECKMATCH, CHECKBUFFERS )
 #define DECODE_STEP_END_HI(CHECKMATCH, CHECKBUFFERS )      DECODE_STEP_END( Hi, CHECKMATCH, CHECKBUFFERS )
 
-    __m128i nibbleMask = _mm_set1_epi8( 0xF );
-    __m128i offsetSize = _mm_set1_epi8( OFFSET_SIZE );
+    __m128i nibbleMask         = _mm_set1_epi8( 0xF );
+    __m128i literalsPerControl = _mm_set1_epi8( LITERALS_PER_CONTROL );
+    __m128i bytesInOutLUT      = _mm_set_epi8( 0x2B, 0x2A, 0x29, 0x28, 0x27, 0x26, 0x25, 0x24, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33, 0x22, 0x11 );
+
 
     // Note, we use this block here because it allows the "fake" inputEarlyEnd/outputEarlyEnd not to cause register spills 
     // in the decompression loops. And yes, that did actually happen.
@@ -614,22 +636,24 @@ size_t LZSSEF_Decompress( const char* inputChar, size_t inputLength, char* outpu
 
             // We make the implicit assumption that the maximum number of literals to controls here is twice the offset size (4 vs 2),
             // we are doing this here to save keeping the value around (spilling or fetching it each time)
-            __m128i literalsPerControl = _mm_add_epi8( offsetSize, offsetSize );
+
+            __m128i streamBytesLo      = _mm_shuffle_epi8( bytesInOutLUT, controlLo );
+            __m128i streamBytesHi      = _mm_shuffle_epi8( bytesInOutLUT, controlHi );
+            
+            // Here we're calculating the number of bytes that will be output, we are actually subtracting negative one from the control 
+            // (handy trick where comparison result masks are negative one) if carry is not set and it is a literal.
+            __m128i bytesOutLo         = _mm_blendv_epi8( _mm_and_si128( streamBytesLo, nibbleMask ), controlLo, shiftedCarryHi );
+            __m128i bytesOutHi         = _mm_blendv_epi8( _mm_and_si128( streamBytesHi, nibbleMask ), controlHi, carryLo ); 
+
+            // Calculate the number of bytes to read per control.
+            // In the case the carry is set, no bytes. Otherwise, the offset size (2 bytes) for matches or the number of output bytes for literals.
+            __m128i streamBytesReadLo  = _mm_andnot_si128( shiftedCarryHi, _mm_and_si128( _mm_srli_epi32( streamBytesLo, 4 ), nibbleMask ) );
+            __m128i streamBytesReadHi  = _mm_andnot_si128( carryLo, _mm_and_si128( _mm_srli_epi32( streamBytesHi, 4 ), nibbleMask ) );
 
             // Here we are testing if the runs will be literals or matches. Note that if the carries are set from the previous operation
             // this will essentially be ignored later on.
             __m128i isLiteralHi        = _mm_cmplt_epi8( controlHi, literalsPerControl );
             __m128i isLiteralLo        = _mm_cmplt_epi8( controlLo, literalsPerControl );
-
-            // Here we're calculating the number of bytes that will be output, we are actually subtracting negative one from the control 
-            // (handy trick where comparison result masks are negative one) if carry is not set and it is a literal.
-            __m128i bytesOutLo         = _mm_sub_epi8( controlLo, _mm_andnot_si128( shiftedCarryHi, isLiteralLo ) );
-            __m128i bytesOutHi         = _mm_sub_epi8( controlHi, _mm_andnot_si128( carryLo, isLiteralHi ) ); 
-
-            // Calculate the number of bytes to read per control.
-            // In the case the carry is set, no bytes. Otherwise, the offset size (2 bytes) for matches or the number of output bytes for literals.
-            __m128i streamBytesReadLo  = _mm_andnot_si128( shiftedCarryHi, _mm_blendv_epi8( offsetSize, bytesOutLo, isLiteralLo ) );
-            __m128i streamBytesReadHi  = _mm_andnot_si128( carryLo, _mm_blendv_epi8( offsetSize, bytesOutHi, isLiteralHi ) );
 
             // I want 128 set bits please.
             __m128i allSet             = _mm_cmpeq_epi8( shiftedCarryHi, shiftedCarryHi ); 
@@ -717,31 +741,57 @@ size_t LZSSEF_Decompress( const char* inputChar, size_t inputLength, char* outpu
         while ( outputCursor < outputSafeEnd && inputCursor < inputSafeEnd )
         {
             // This code is the same as the loop above, see comments there
+
+            // load the control block
             __m128i controlBlock       = _mm_loadu_si128( reinterpret_cast<const __m128i*>( inputCursor ) );
+
+            // split the control block into high and low nibbles
             __m128i controlHi          = _mm_and_si128( _mm_srli_epi32( controlBlock, CONTROL_BITS ), nibbleMask );
             __m128i controlLo          = _mm_and_si128( controlBlock, nibbleMask );
 
+            // Note, the carries are set when the nibble is at its highest value, 15, meaning the operation after will
+            // be an extension of the current match operation.
+
+            // Work out the carry for the low nibbles (which will be used with the high controls to put them into 
+            // match without offset read mode).
             __m128i carryLo            = _mm_cmpeq_epi8( controlLo, nibbleMask );
+
+            // The carry for the high nibbles is used with the low controls, but needs one byte from the previous iteration. We save
+            // the calculated carry to use that byte next iteration.
             __m128i carryHi            = _mm_cmpeq_epi8( controlHi, nibbleMask );
-            __m128i shiftedCarryHi     = _mm_alignr_epi8( carryHi, previousCarryHi, 15 ); // where we take the carry from the previous hi values
+            __m128i shiftedCarryHi     = _mm_alignr_epi8( carryHi, previousCarryHi, 15 ); 
 
             previousCarryHi = carryHi;
 
-            __m128i literalsPerControl = _mm_add_epi8( offsetSize, offsetSize );
+            // We make the implicit assumption that the maximum number of literals to controls here is twice the offset size (4 vs 2),
+            // we are doing this here to save keeping the value around (spilling or fetching it each time)
+
+            __m128i streamBytesLo      = _mm_shuffle_epi8( bytesInOutLUT, controlLo );
+            __m128i streamBytesHi      = _mm_shuffle_epi8( bytesInOutLUT, controlHi );
+
+            // Here we're calculating the number of bytes that will be output, we are actually subtracting negative one from the control 
+            // (handy trick where comparison result masks are negative one) if carry is not set and it is a literal.
+            __m128i bytesOutLo         = _mm_blendv_epi8( _mm_and_si128( streamBytesLo, nibbleMask ), controlLo, shiftedCarryHi );
+            __m128i bytesOutHi         = _mm_blendv_epi8( _mm_and_si128( streamBytesHi, nibbleMask ), controlHi, carryLo ); 
+
+            // Calculate the number of bytes to read per control.
+            // In the case the carry is set, no bytes. Otherwise, the offset size (2 bytes) for matches or the number of output bytes for literals.
+            __m128i streamBytesReadLo  = _mm_andnot_si128( shiftedCarryHi, _mm_and_si128( _mm_srli_epi32( streamBytesLo, 4 ), nibbleMask ) );
+            __m128i streamBytesReadHi  = _mm_andnot_si128( carryLo, _mm_and_si128( _mm_srli_epi32( streamBytesHi, 4 ), nibbleMask ) );
+
+            // Here we are testing if the runs will be literals or matches. Note that if the carries are set from the previous operation
+            // this will essentially be ignored later on.
             __m128i isLiteralHi        = _mm_cmplt_epi8( controlHi, literalsPerControl );
             __m128i isLiteralLo        = _mm_cmplt_epi8( controlLo, literalsPerControl );
 
-            __m128i bytesOutLo         = _mm_sub_epi8( controlLo, _mm_andnot_si128( shiftedCarryHi, isLiteralLo ) );
-            __m128i bytesOutHi         = _mm_sub_epi8( controlHi, _mm_andnot_si128( carryLo, isLiteralHi ) ); 
+            // I want 128 set bits please.
+            __m128i allSet             = _mm_cmpeq_epi8( shiftedCarryHi, shiftedCarryHi ); 
 
-            __m128i streamBytesReadLo  = _mm_andnot_si128( shiftedCarryHi, _mm_blendv_epi8( offsetSize, bytesOutLo, isLiteralLo ) );
-            __m128i streamBytesReadHi  = _mm_andnot_si128( carryLo, _mm_blendv_epi8( offsetSize, bytesOutHi, isLiteralHi ) );
+            // Masks to read the offset (or keep the previous one) - set in the case that this is not a literal and the carry is not set
+            __m128i readOffsetLo       = _mm_xor_si128( _mm_or_si128( isLiteralLo, shiftedCarryHi ), allSet );
+            __m128i readOffsetHi       = _mm_xor_si128( _mm_or_si128( isLiteralHi, carryLo ), allSet );
 
-            __m128i neg1               = _mm_cmpeq_epi8( shiftedCarryHi, shiftedCarryHi ); 
-
-            __m128i readOffsetLo       = _mm_xor_si128( _mm_or_si128( isLiteralLo, shiftedCarryHi ), neg1 );
-            __m128i readOffsetHi       = _mm_xor_si128( _mm_or_si128( isLiteralHi, carryLo ), neg1 );
-
+            // Masks whether we are reading literals - set if the carry is not set and these are literals.
             __m128i fromLiteralLo      = _mm_andnot_si128( shiftedCarryHi, isLiteralLo );
             __m128i fromLiteralHi      = _mm_andnot_si128( carryLo, isLiteralHi );
 
@@ -818,31 +868,58 @@ size_t LZSSEF_Decompress( const char* inputChar, size_t inputLength, char* outpu
 
         while ( outputCursor < outputEarlyEnd && inputCursor < inputEarlyEnd )
         {
+            // This code is the same as the loop above, see comments there
+
+            // load the control block
             __m128i controlBlock       = _mm_loadu_si128( reinterpret_cast<const __m128i*>( inputCursor ) );
+
+            // split the control block into high and low nibbles
             __m128i controlHi          = _mm_and_si128( _mm_srli_epi32( controlBlock, CONTROL_BITS ), nibbleMask );
             __m128i controlLo          = _mm_and_si128( controlBlock, nibbleMask );
 
+            // Note, the carries are set when the nibble is at its highest value, 15, meaning the operation after will
+            // be an extension of the current match operation.
+
+            // Work out the carry for the low nibbles (which will be used with the high controls to put them into 
+            // match without offset read mode).
             __m128i carryLo            = _mm_cmpeq_epi8( controlLo, nibbleMask );
+
+            // The carry for the high nibbles is used with the low controls, but needs one byte from the previous iteration. We save
+            // the calculated carry to use that byte next iteration.
             __m128i carryHi            = _mm_cmpeq_epi8( controlHi, nibbleMask );
             __m128i shiftedCarryHi     = _mm_alignr_epi8( carryHi, previousCarryHi, 15 ); 
 
             previousCarryHi = carryHi;
 
-            __m128i literalsPerControl = _mm_add_epi8( offsetSize, offsetSize );
+            // We make the implicit assumption that the maximum number of literals to controls here is twice the offset size (4 vs 2),
+            // we are doing this here to save keeping the value around (spilling or fetching it each time)
+
+            __m128i streamBytesLo      = _mm_shuffle_epi8( bytesInOutLUT, controlLo );
+            __m128i streamBytesHi      = _mm_shuffle_epi8( bytesInOutLUT, controlHi );
+
+            // Here we're calculating the number of bytes that will be output, we are actually subtracting negative one from the control 
+            // (handy trick where comparison result masks are negative one) if carry is not set and it is a literal.
+            __m128i bytesOutLo         = _mm_blendv_epi8( _mm_and_si128( streamBytesLo, nibbleMask ), controlLo, shiftedCarryHi );
+            __m128i bytesOutHi         = _mm_blendv_epi8( _mm_and_si128( streamBytesHi, nibbleMask ), controlHi, carryLo ); 
+
+            // Calculate the number of bytes to read per control.
+            // In the case the carry is set, no bytes. Otherwise, the offset size (2 bytes) for matches or the number of output bytes for literals.
+            __m128i streamBytesReadLo  = _mm_andnot_si128( shiftedCarryHi, _mm_and_si128( _mm_srli_epi32( streamBytesLo, 4 ), nibbleMask ) );
+            __m128i streamBytesReadHi  = _mm_andnot_si128( carryLo, _mm_and_si128( _mm_srli_epi32( streamBytesHi, 4 ), nibbleMask ) );
+
+            // Here we are testing if the runs will be literals or matches. Note that if the carries are set from the previous operation
+            // this will essentially be ignored later on.
             __m128i isLiteralHi        = _mm_cmplt_epi8( controlHi, literalsPerControl );
             __m128i isLiteralLo        = _mm_cmplt_epi8( controlLo, literalsPerControl );
 
-            __m128i bytesOutLo         = _mm_sub_epi8( controlLo, _mm_andnot_si128( shiftedCarryHi, isLiteralLo ) );
-            __m128i bytesOutHi         = _mm_sub_epi8( controlHi, _mm_andnot_si128( carryLo, isLiteralHi ) );
+            // I want 128 set bits please.
+            __m128i allSet             = _mm_cmpeq_epi8( shiftedCarryHi, shiftedCarryHi ); 
 
-            __m128i streamBytesReadLo  = _mm_andnot_si128( shiftedCarryHi, _mm_blendv_epi8( offsetSize, bytesOutLo, isLiteralLo ) );
-            __m128i streamBytesReadHi  = _mm_andnot_si128( carryLo, _mm_blendv_epi8( offsetSize, bytesOutHi, isLiteralHi ) );
+            // Masks to read the offset (or keep the previous one) - set in the case that this is not a literal and the carry is not set
+            __m128i readOffsetLo       = _mm_xor_si128( _mm_or_si128( isLiteralLo, shiftedCarryHi ), allSet );
+            __m128i readOffsetHi       = _mm_xor_si128( _mm_or_si128( isLiteralHi, carryLo ), allSet );
 
-            __m128i neg1               = _mm_cmpeq_epi8( shiftedCarryHi, shiftedCarryHi ); 
-
-            __m128i readOffsetLo       = _mm_xor_si128( _mm_or_si128( isLiteralLo, shiftedCarryHi ), neg1 );
-            __m128i readOffsetHi       = _mm_xor_si128( _mm_or_si128( isLiteralHi, carryLo ), neg1 );
-
+            // Masks whether we are reading literals - set if the carry is not set and these are literals.
             __m128i fromLiteralLo      = _mm_andnot_si128( shiftedCarryHi, isLiteralLo );
             __m128i fromLiteralHi      = _mm_andnot_si128( carryLo, isLiteralHi );
 

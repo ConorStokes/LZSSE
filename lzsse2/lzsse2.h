@@ -23,20 +23,20 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#ifndef LZSSEO_H__
-#define LZSSEO_H__
+#ifndef LZSSE2_H__
+#define LZSSE2_H__
 
 #pragma once
 
-typedef struct LZSSEO_OptimalParseState LZSSEO_OptimalParseState;
+typedef struct LZSSE2_OptimalParseState LZSSE2_OptimalParseState;
 
     // Make a compressor state for the re-entrant version of 
-LZSSEO_OptimalParseState* LZSSEO_MakeOptimalParseState( size_t bufferSize );
+LZSSE2_OptimalParseState* LZSSE2_MakeOptimalParseState( size_t bufferSize );
 
-void LZSSEO_FreeOptimalParseState( LZSSEO_OptimalParseState* toFree );
+void LZSSE2_FreeOptimalParseState( LZSSE2_OptimalParseState* toFree );
 
-size_t LZSSEO_CompressOptimalParse( LZSSEO_OptimalParseState* state, const char* input, size_t inputLength, char* output, size_t outputLength, unsigned int level );
+size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const char* input, size_t inputLength, char* output, size_t outputLength, unsigned int level );
 
-size_t LZSSEO_Decompress( const char* input, size_t inputLength, char* output, size_t outputLength );
+size_t LZSSE2_Decompress( const char* input, size_t inputLength, char* output, size_t outputLength );
 
-#endif // -- LZSSEO_H__
+#endif // -- LZSSE2_H__
