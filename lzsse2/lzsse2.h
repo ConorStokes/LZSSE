@@ -35,7 +35,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  /* Re-usable parse state object for compression. */
 typedef struct LZSSE2_OptimalParseState LZSSE2_OptimalParseState;
 
-/* Allocate the parse state for compression - returns null on failure */
+/* Allocate the parse state for compression - returns null on failure. Note
+   Buffersize has to be greater or equal to any inputLength used with LZSSE2_CompressOptimalParse */
 LZSSE2_OptimalParseState* LZSSE2_MakeOptimalParseState( size_t bufferSize );
 
 /* De-allocate the parse state for compression */

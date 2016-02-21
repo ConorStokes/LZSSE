@@ -24,9 +24,8 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include <memory.h>
+#include <stdlib.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <assert.h>
 #include "lzsse2_platform.h"
 #include "lzsse2.h"
 
@@ -88,12 +87,16 @@ struct LZSSE2_OptimalParseState
     TreeNode window[ LZ_WINDOW_SIZE ];
 
     Arrival* arrivals;
+
+    size_t bufferSize;
 };
 
 
 LZSSE2_OptimalParseState* LZSSE2_MakeOptimalParseState( size_t bufferSize )
 {
     LZSSE2_OptimalParseState* result = reinterpret_cast< LZSSE2_OptimalParseState* >( ::malloc( sizeof( LZSSE2_OptimalParseState ) ) );
+
+    result->bufferSize = bufferSize;
 
     if ( result != nullptr )
     {
@@ -275,7 +278,7 @@ inline Match SearchAndUpdateFinder( LZSSE2_OptimalParseState& state, const uint8
 
 size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void* inputChar, size_t inputLength, void* outputChar, size_t outputLength, unsigned int level )
 {
-    if ( outputLength < inputLength )
+    if ( outputLength < inputLength || state->bufferSize < inputLength  )
     {
         // error case, output buffer not large enough.
         return 0;
