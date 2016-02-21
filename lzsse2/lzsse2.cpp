@@ -23,11 +23,11 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include "lzsse2.h"
 #include <intrin.h>
 #include <memory.h>
 #include <stdint.h>
 #include <stdio.h>
+#include "lzsse2.h"
 
 #include <assert.h>
 
@@ -933,8 +933,10 @@ size_t LZSSE2_Decompress( const void* inputChar, size_t inputLength, void* outpu
     
     // Decoding loop with all buffer checks.
     {
-        const  uint8_t* inputEarlyEnd  = ( input + inputLength ) - END_PADDING_LITERALS;
-        uint8_t*        outputEarlyEnd = ( output + outputLength ) - END_PADDING_LITERALS;
+        const uint8_t* inputEarlyEnd;
+        uint8_t*        outputEarlyEnd;
+        inputEarlyEnd  = (( input + inputLength ) - END_PADDING_LITERALS);
+        outputEarlyEnd = ( output + outputLength ) - END_PADDING_LITERALS;
 
         while ( outputCursor < outputEarlyEnd && inputCursor < inputEarlyEnd )
         {
