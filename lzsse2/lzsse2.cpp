@@ -23,13 +23,12 @@ ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-#include <intrin.h>
 #include <memory.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "lzsse2.h"
-
 #include <assert.h>
+#include "lzsse2_platform.h"
+#include "lzsse2.h"
 
 #pragma warning ( disable : 4127 )
 
