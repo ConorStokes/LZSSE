@@ -265,8 +265,8 @@ inline Match SearchAndUpdateFinder( LZSSE2_OptimalParseState& state, const uint8
 
             if ( matchLength >= result.length )
             {
-                result.length = matchLength;
-                result.offset = matchOffset;
+                result.length   = matchLength;
+                result.offset   = matchOffset;
                 result.position = matchPosition;
             }
         }
@@ -278,7 +278,7 @@ inline Match SearchAndUpdateFinder( LZSSE2_OptimalParseState& state, const uint8
 
 size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void* inputChar, size_t inputLength, void* outputChar, size_t outputLength, unsigned int level )
 {
-    if ( outputLength < inputLength || state->bufferSize < inputLength  )
+    if ( outputLength < inputLength || state->bufferSize < inputLength )
     {
         // error case, output buffer not large enough.
         return 0;
@@ -371,7 +371,7 @@ size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void*
 
                 if ( matchedLength > EXTENDED_MATCH_BOUND )
                 {
-                    matchCost += ( matchedLength - 1 ) / EXTENDED_MATCH_BOUND;
+                    matchCost += ( ( matchedLength - 1 ) / EXTENDED_MATCH_BOUND ) * CONTROL_BITS;
                 }
 
                 if ( matchArrival > arrivalWatermark || matchArrival->cost > matchCost )
@@ -386,8 +386,8 @@ size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void*
 
             if ( match.length > SKIP_MATCH_LENGTH )
             {
-                arrival     += match.length - 2;
-                inputCursor += match.length - 2;
+                arrival     += match.length - LITERALS_PER_CONTROL;
+                inputCursor += match.length - LITERALS_PER_CONTROL;
             }
         }
     }
