@@ -64,6 +64,7 @@ namespace
     const uint32_t OPTIMAL_HASH_MASK       = OPTIMAL_BUCKETS_COUNT - 1;
     const uint32_t LITERAL_BITS            = 8;
     const size_t   SKIP_MATCH_LENGTH       = 128;
+    const uint32_t NO_SKIP_LEVEL           = 17;
 
 }
 
@@ -407,7 +408,7 @@ size_t LZSSE8_CompressOptimalParse( LZSSE8_OptimalParseState* state, const void*
                 }
             }
 
-            if ( match.length > SKIP_MATCH_LENGTH )
+            if ( match.length > SKIP_MATCH_LENGTH && level < NO_SKIP_LEVEL )
             {
                 arrival     += match.length - LITERALS_PER_CONTROL;
                 inputCursor += match.length - LITERALS_PER_CONTROL;

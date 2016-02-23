@@ -63,7 +63,7 @@ namespace
     const size_t   INPUT_BUFFER_SAFE       = MAX_INPUT_PER_CONTROL * CONTROLS_PER_BLOCK;
     const uint16_t INITIAL_OFFSET          = MIN_MATCH_LENGTH;
     const size_t   SKIP_MATCH_LENGTH       = 128;
-    const uint32_t MAXIMUM_COMPRESSION     = 16;
+    const uint32_t NO_SKIP_LEVEL           = 17;
 }
 
 struct Arrival
@@ -384,7 +384,7 @@ size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void*
                 }
             }
 
-            if ( match.length > SKIP_MATCH_LENGTH )
+            if ( match.length > SKIP_MATCH_LENGTH && level < NO_SKIP_LEVEL )
             {
                 arrival     += match.length - LITERALS_PER_CONTROL;
                 inputCursor += match.length - LITERALS_PER_CONTROL;
