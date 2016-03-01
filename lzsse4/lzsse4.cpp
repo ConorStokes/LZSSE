@@ -26,6 +26,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <memory.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #include "lzsse4_platform.h"
 #include "lzsse4.h"
