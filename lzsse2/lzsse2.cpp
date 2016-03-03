@@ -242,7 +242,7 @@ inline Match SearchAndUpdateFinder( LZSSE2_OptimalParseState& state, const uint8
         if ( matchPosition >= 0 )
         {
             uint16_t       matchOffset = static_cast<uint16_t>( position - matchPosition );
-            const uint8_t* key = input + matchPosition;
+            const uint8_t* key         = input + matchPosition;
             size_t         matchLength = 0;
 
             while ( matchLength < lengthToEnd )
@@ -396,7 +396,7 @@ size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void*
 
     // If this would cost more to encode than it would if it were just literals, encode it with no control blocks,
     // just literals
-    if ( ( arrivalWatermark->cost + END_PADDING_LITERALS * LITERAL_BITS ) > ( inputLength * LITERAL_BITS ) )
+    if ( ( arrivalWatermark->cost + END_PADDING_LITERALS * LITERAL_BITS + CONTROLS_PER_BLOCK * CONTROL_BITS ) > ( inputLength * LITERAL_BITS ) )
     {
         memcpy( output, input, inputLength );
 
@@ -427,8 +427,10 @@ size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void*
 
     Arrival* nextPathNode;
 
-    size_t   totalPathLength = MIN_MATCH_LENGTH;
-    uint16_t previousOffset  = INITIAL_OFFSET;
+    size_t   totalPathLength  = MIN_MATCH_LENGTH;
+    uint16_t previousOffset   = INITIAL_OFFSET;
+
+    bool     lastControlIsNop = false;
 
     // Now walk forwards again and actually write out the data.
     for ( const Arrival* pathNode = state->arrivals; pathNode < arrivalWatermark; pathNode = nextPathNode )
@@ -440,6 +442,8 @@ size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void*
         size_t pathDistance = nextPathNode - pathNode;
 
         totalPathLength += pathDistance;
+
+        lastControlIsNop = false;
 
         if ( pathDistance < MIN_MATCH_LENGTH )
         {
@@ -520,6 +524,7 @@ size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void*
 
                     ++totalControlCount;
                     ++currentControlCount;
+
                 }
                 else
                 {
@@ -534,6 +539,11 @@ size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void*
                             static_cast< uint8_t >( toEncode ) << CONTROL_BITS;
                     }
 
+                    if ( toEncode == 0 && currentControlCount == 0 )
+                    {
+                        lastControlIsNop = true;
+                    }
+
                     ++totalControlCount;
                     ++currentControlCount;
 
@@ -541,6 +551,11 @@ size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void*
                 }
             }
         }
+    }
+
+    if ( lastControlIsNop )
+    {
+        outputCursor -= CONTROL_BLOCK_SIZE;
     }
 
     size_t remainingLiterals = ( input + inputLength ) - inputCursor;

@@ -145,9 +145,13 @@ size_t LZSSE4_CompressFast( LZSSE4_FastParseState* state, const void* inputChar,
 
     outputCursor += CONTROL_BLOCK_SIZE;
 
+    bool lastControlIsNop = false;
+    
     // Loop through the data until we hit the end of one of the buffers (minus the end padding literals)
     while ( inputCursor < inputEarlyEnd && outputCursor <= outputEarlyEnd )
     { 
+        lastControlIsNop = false;
+
         hash = HashFast( inputCursor );
 
         int      matchPosition   = state->buckets[ hash & FAST_HASH_MASK ];
@@ -293,6 +297,11 @@ size_t LZSSE4_CompressFast( LZSSE4_FastParseState* state, const void* inputChar,
                     currentControlBlock[ currentControlCount >> 1 ] = 
                         ( currentControlBlock[ currentControlCount >> 1 ] >> 4 ) | ( static_cast<uint8_t>( toEncode ) << 4 );
 
+                    if ( currentControlCount == 0 && toEncode == 0 )
+                    {
+                        lastControlIsNop = true;
+                    }
+
                     ++currentControlCount;
 
                     break;
@@ -378,6 +387,8 @@ size_t LZSSE4_CompressFast( LZSSE4_FastParseState* state, const void* inputChar,
         // Flush any remaining literals.
         if ( literalsToFlush > 0 )
         {
+            lastControlIsNop = false;
+
             if ( currentControlCount == CONTROLS_PER_BLOCK )
             {
                 currentControlBlock = outputCursor;
@@ -405,6 +416,11 @@ size_t LZSSE4_CompressFast( LZSSE4_FastParseState* state, const void* inputChar,
         if ( ( currentControlCount & 1 ) > 0 )
         {
             currentControlBlock[ currentControlCount >> 1 ] >>= 4;
+        }
+
+        if ( lastControlIsNop )
+        {
+            outputCursor -= CONTROL_BLOCK_SIZE;
         }
 
         size_t remainingLiterals = ( input + inputLength ) - inputCursor;

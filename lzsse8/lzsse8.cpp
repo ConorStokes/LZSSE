@@ -419,7 +419,7 @@ size_t LZSSE8_CompressOptimalParse( LZSSE8_OptimalParseState* state, const void*
 
     // If this would cost more to encode than it would if it were just literals, encode it with no control blocks,
     // just literals
-    if ( ( arrivalWatermark->cost + END_PADDING_LITERALS * LITERAL_BITS ) > ( inputLength * LITERAL_BITS ) )
+    if ( ( arrivalWatermark->cost + END_PADDING_LITERALS * LITERAL_BITS + CONTROLS_PER_BLOCK * CONTROL_BITS ) > ( inputLength * LITERAL_BITS ) )
     {
         memcpy( output, input, inputLength );
 
@@ -453,6 +453,8 @@ size_t LZSSE8_CompressOptimalParse( LZSSE8_OptimalParseState* state, const void*
     size_t   totalPathLength = LITERALS_PER_CONTROL;
     uint16_t previousOffset  = INITIAL_OFFSET;
 
+    bool lastControlIsNop = false;
+
     // Now walk forwards again and actually write out the data.
     for ( const Arrival* pathNode = state->arrivals; pathNode < arrivalWatermark; pathNode = nextPathNode )
     {
@@ -463,6 +465,8 @@ size_t LZSSE8_CompressOptimalParse( LZSSE8_OptimalParseState* state, const void*
         size_t pathDistance = nextPathNode - pathNode;
 
         totalPathLength += pathDistance;
+
+        lastControlIsNop = false;
 
         if ( nextPathNode->offset == 0 )
         {
@@ -593,6 +597,11 @@ size_t LZSSE8_CompressOptimalParse( LZSSE8_OptimalParseState* state, const void*
                                 static_cast< uint8_t >( toEncode ) << CONTROL_BITS;
                         }
                         
+                        if ( toEncode == 0 && currentControlCount == 0 )
+                        {
+                            lastControlIsNop = true;
+                        }
+
                         ++currentControlCount;
 
                         break;
@@ -600,6 +609,11 @@ size_t LZSSE8_CompressOptimalParse( LZSSE8_OptimalParseState* state, const void*
                 }
             }
         }
+    }
+
+    if ( lastControlIsNop )
+    {
+        outputCursor -= CONTROL_BLOCK_SIZE;
     }
 
     size_t remainingLiterals = ( input + inputLength ) - inputCursor;
@@ -664,9 +678,13 @@ size_t LZSSE8_CompressFast( LZSSE8_FastParseState* state, const void* inputChar,
 
     outputCursor += CONTROL_BLOCK_SIZE;
 
+    bool lastControlIsNop = false;
+
     // Loop through the data until we hit the end of one of the buffers (minus the end padding literals)
     while ( inputCursor < inputEarlyEnd && outputCursor <= outputEarlyEnd )
     { 
+        lastControlIsNop = false;
+
         hash = HashFast( inputCursor );
 
         int      matchPosition   = state->buckets[ hash & FAST_HASH_MASK ];
@@ -827,6 +845,11 @@ size_t LZSSE8_CompressFast( LZSSE8_FastParseState* state, const void* inputChar,
                         currentControlBlock[ currentControlCount >> 1 ] =
                             ( currentControlBlock[ currentControlCount >> 1 ] >> 4 ) | ( static_cast<uint8_t>( toEncode ) << 4 );
 
+                        if ( currentControlBlock == 0 && toEncode == 0 )
+                        {
+                            lastControlIsNop = true;
+                        }
+
                         ++currentControlCount;
 
                         break;
@@ -913,6 +936,8 @@ size_t LZSSE8_CompressFast( LZSSE8_FastParseState* state, const void* inputChar,
         // Flush any remaining literals.
         if ( literalsToFlush > 0 )
         {
+            lastControlIsNop = false;
+
             if ( currentControlCount == CONTROLS_PER_BLOCK )
             {
                 currentControlBlock = outputCursor;
@@ -942,6 +967,10 @@ size_t LZSSE8_CompressFast( LZSSE8_FastParseState* state, const void* inputChar,
             currentControlBlock[ currentControlCount >> 1 ] >>= 4;
         }
 
+        if ( lastControlIsNop )
+        {
+            outputCursor -= CONTROL_BLOCK_SIZE;
+        }
 
         size_t remainingLiterals = ( input + inputLength ) - inputCursor;
 
