@@ -32,6 +32,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 * Supports minimum 4 byte matches, maximum 15 bytes of match per control word and 8 byte literal runs per control word. 
 */
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
 /* Re-usable parse state object for compression. */
 typedef struct LZSSE8_FastParseState LZSSE8_FastParseState;
 
@@ -50,6 +55,7 @@ LZSSE8_OptimalParseState* LZSSE8_MakeOptimalParseState( size_t bufferSize );
 
 /* De-allocate the parse state for compression */
 void LZSSE8_FreeOptimalParseState( LZSSE8_OptimalParseState* toFree );
+
 
 /* "Optimal" compression routine.
 * Will compress data into LZSSE8 format, uses hash BST matching to find matches and run an optimal parse (high relative memory usage). Requires SSE 4.1.
@@ -104,5 +110,8 @@ size_t LZSSE8_CompressFast( LZSSE8_FastParseState* state, const void* input, siz
 */ 
 size_t LZSSE8_Decompress( const void* input, size_t inputLength, void* output, size_t outputLength );
 
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* -- LZSSE8_H__ */

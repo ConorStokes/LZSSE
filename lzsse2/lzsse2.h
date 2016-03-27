@@ -32,6 +32,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  * Supports minimum 3 byte matches, maximum 16 bytes of match per control word and 2 byte literal runs per control word. 
  */
 
+#ifdef __cplusplus
+extern "C"
+{
+#endif
+
  /* Re-usable parse state object for compression. */
 typedef struct LZSSE2_OptimalParseState LZSSE2_OptimalParseState;
 
@@ -77,5 +82,9 @@ size_t LZSSE2_CompressOptimalParse( LZSSE2_OptimalParseState* state, const void*
 * Remember, corrupt data can still be valid to decompress.
 */ 
 size_t LZSSE2_Decompress( const void* input, size_t inputLength, void* output, size_t outputLength );
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* -- LZSSE2_H__ */
