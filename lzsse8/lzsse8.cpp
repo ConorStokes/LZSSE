@@ -117,7 +117,6 @@ struct TreeNode
 
 struct LZSSE8_OptimalParseState
 {
-    // Note, we should really replace this with a BST, hash chaining works but is *slooooooooooooooow* for optimal parse.
     int32_t roots[ OPTIMAL_BUCKETS_COUNT ];
 
     TreeNode window[ LZ_WINDOW_SIZE ];
