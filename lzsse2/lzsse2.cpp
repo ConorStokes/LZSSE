@@ -96,7 +96,7 @@ struct LZSSE2_OptimalParseState
 
 LZSSE2_OptimalParseState* LZSSE2_MakeOptimalParseState( size_t bufferSize )
 {
-    if ( bufferSize && ( SIZE_MAX / sizeof( Arrival ) ) < bufferSize )
+    if ( bufferSize > 0 && ( SIZE_MAX / sizeof( Arrival ) ) < bufferSize )
     {
         return nullptr;
     }
