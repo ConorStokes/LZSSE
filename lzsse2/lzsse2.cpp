@@ -96,6 +96,11 @@ struct LZSSE2_OptimalParseState
 
 LZSSE2_OptimalParseState* LZSSE2_MakeOptimalParseState( size_t bufferSize )
 {
+    if ( bufferSize && ( SIZE_MAX / sizeof( Arrival ) ) < bufferSize )
+    {
+        return nullptr;
+    }
+
     LZSSE2_OptimalParseState* result = reinterpret_cast< LZSSE2_OptimalParseState* >( ::malloc( sizeof( LZSSE2_OptimalParseState ) ) );
 
     result->bufferSize = bufferSize;
