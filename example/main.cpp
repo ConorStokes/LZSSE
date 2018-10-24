@@ -2,10 +2,10 @@
 //
 #define _CRT_SECURE_NO_WARNINGS 1
 
+#include <string.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <memory.h>
 #include "../lzsse2/lzsse2.h"
 #include "../lzsse4/lzsse4.h"
 #include "../lzsse8/lzsse8.h"
